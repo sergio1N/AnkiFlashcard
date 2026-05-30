@@ -2,41 +2,59 @@ import os
 import re
 from datetime import datetime
 from ia import generar_tarjeta
-from Anki import añadir_a_anki
+from anki import crear_modelo_si_no_existe, añadir_a_anki
 
 print("Iniciando extracción de datos...")
-#ruta de notas
-ruta_base = r"C:\Github\obsidiana-notes\Personal\daily notes"
 
-fecha_hoy = datetime.now().strftime("%Y-%m-%d")
-archivo_hoy = os.path.join(ruta_base, f"{fecha_hoy}.md") #Nombre del archivo a extraer datos.
+# ─── Ruta de notas ─────────────────────────────────────────────────────────────
+ruta_base   = r"C:\Github\obsidiana-notes\Personal\daily notes"
+fecha_hoy   = datetime.now().strftime("%Y-%m-%d")
+archivo_hoy = os.path.join(ruta_base, f"{fecha_hoy}.md")
 
+# ─── Extractor ────────────────────────────────────────────────────────────────
 def extraer_datos():
     if not os.path.exists(archivo_hoy):
         print("No se encontró la nota de hoy.")
-        return None
+        return []
 
     with open(archivo_hoy, "r", encoding="utf-8") as f:
         contenido = f.read()
 
-    # Captura: número. [palabra] (salto de línea) context: texto
     pattern = r"\d+\.\s*\[([^\]]+)\]\s*\n\s*context:\s*(.+)"
     matches = re.findall(pattern, contenido, re.IGNORECASE)
-    
+
+    if not matches:
+        print("No se encontraron palabras en la nota de hoy.")
+    else:
+        print(f"Palabras encontradas: {[m[0] for m in matches]}")
+
     return matches
 
-# Ejemplo de uso
+# ─── Main ──────────────────────────────────────────────────────────────────────
 datos = extraer_datos()
-print("Datos extraídos:", datos)
 
-# Procesar en IA
-for palabra, contexto in datos:
-    tarjeta = generar_tarjeta(palabra, contexto)
-    print(f"Tarjeta generada:\n{tarjeta}")
-    partes = tarjeta.strip().split('|')
-    frente_anki = f"{partes[0]}<br><small>{partes[1]}</small>"
-    reverso_anki = f"{partes[2]}<br><br><b>Ejemplo:</b> {partes[3]}<br><i>{partes[4]}</i>"
+if datos:
+    crear_modelo_si_no_existe()
 
-    #inyectar a Anki
-    resultado = añadir_a_anki(frente_anki, reverso_anki)
-    print(f"Resultado de inyección: {resultado}")
+    for palabra, contexto in datos:
+        print(f"\nProcesando: {palabra}")
+
+        tarjeta = generar_tarjeta(palabra, contexto)
+        print(f"  Respuesta IA: {tarjeta}")
+
+        partes = [p.strip() for p in tarjeta.strip().split('|')]
+
+        if len(partes) < 6:
+            print(f"  Formato inesperado ({len(partes)} campos), saltando '{palabra}'.")
+            continue
+
+        palabra_raw   = partes[0]
+        pronunciacion = partes[1]
+        traduccion    = partes[2]
+        ejemplo       = partes[3]
+        ejemplo_trad  = partes[4]
+        usar_imagen   = partes[5].strip().upper() == "SI"
+
+        print(f"  Imagen: {'sí' if usar_imagen else 'no'}")
+
+        añadir_a_anki(palabra_raw, pronunciacion, traduccion, ejemplo, ejemplo_trad, usar_imagen="SI")
